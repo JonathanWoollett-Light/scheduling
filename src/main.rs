@@ -1,42 +1,63 @@
 use num_format::{Locale, ToFormattedString};
-use rand::distributions::{Distribution, Uniform};
-use std::{time::Instant,sync::atomic::{AtomicUsize,Ordering}};
+use rand::{
+    distributions::{Distribution, Uniform},
+    rngs::ThreadRng,
+};
+use std::usize;
+use std::{
+    sync::atomic::{AtomicUsize, Ordering},
+    time::Instant,
+};
+
+trait Distance {
+    fn distance(&self, other: &Self) -> f32;
+}
 
 #[derive(Debug, Copy, Clone)]
 struct Coord {
     x: usize,
     y: usize,
 }
-#[derive(Debug)]
-struct Task {
-    id: usize,
-    from: Coord,
-    to: Coord,
+impl Coord {
+    fn new(
+        dist: &rand::distributions::Uniform<usize>,
+        mut rng: &mut rand::rngs::ThreadRng,
+    ) -> Self {
+        Coord {
+            x: dist.sample(&mut rng),
+            y: dist.sample(&mut rng),
+        }
+    }
 }
-impl Task {
-    fn distance(&self) -> f32 {
-        distance(&self.from, &self.to)
+impl Distance for Coord {
+    fn distance(&self, other: &Self) -> f32 {
+        (self.x as f32 - other.x as f32).abs() + (self.y as f32 - other.y as f32).abs()
     }
 }
 
-//fn distance(from: &Coord, to: &Coord) -> f32 {
-//     (((from.x as f32 - to.x as f32).powf(2f32) + (from.y as f32 - to.y as f32).powf(2f32))).sqrt()
-// }
-fn distance(from: &Coord, to: &Coord) -> f32 {
-    (from.x as f32 - to.x as f32).abs() + (from.y as f32 - to.y as f32).abs()
-}
-
 #[derive(Debug, Copy, Clone)]
-struct Edge {
-    agent: usize,
-    task: usize,
-    path: Option<(Coord, Coord, Coord, f32)>,
+struct Agent<T: Distance + Clone> {
+    state: T,
 }
 
 #[derive(Debug)]
-struct Node {
-    edge: Edge, // edge leading to this node
-    children: Vec<Box<Node>>,
+struct Task<T: Distance> {
+    id: usize,
+    from: T,
+    to: T,
+}
+
+#[derive(Debug, Copy, Clone)]
+struct Edge<T: Distance> {
+    agent: usize,
+    task: usize,
+    path: Option<(T, T, T, f32)>,
+}
+
+#[derive(Debug)]
+struct Node<T: Distance> {
+    edge: Edge<T>, // edge leading to this node
+    children: Vec<Box<Node<T>>>,
     min_path_time: f32,
 }
 
@@ -51,25 +72,18 @@ fn main() {
     let mut rng = rand::thread_rng();
     let dist = Uniform::from(0..SIZE);
 
-    let agents: Vec<Coord> = (0..NUM_OF_AGENTS)
-        .map(|_| Coord {
-            x: dist.sample(&mut rng),
-            y: dist.sample(&mut rng),
+    let agents: Vec<Agent<Coord>> = (0..NUM_OF_AGENTS)
+        .map(|_| Agent {
+            state: Coord::new(&dist, &mut rng),
         })
         .collect();
     //println!("agents: {:?}", agents);
 
-    let tasks: Vec<Task> = (0..NUM_OF_TASKS)
+    let tasks: Vec<Task<Coord>> = (0..NUM_OF_TASKS)
         .map(|i| Task {
             id: i as usize,
-            from: Coord {
-                x: dist.sample(&mut rng),
-                y: dist.sample(&mut rng),
-            },
-            to: Coord {
-                x: dist.sample(&mut rng),
-                y: dist.sample(&mut rng),
-            },
+            from: Coord::new(&dist, &mut rng),
+            to: Coord::new(&dist, &mut rng),
         })
         .collect();
     //println!("tasks: {:?}", tasks);
@@ -84,10 +98,10 @@ fn main() {
     //println!("{:#?}", tree);
     println!("{:#?}", path);
     println!("{:.2}", min_time);
-    println!("{:.?}",EDGE_COUNTER);
+    println!("nodes: {:.?}", EDGE_COUNTER);
 }
 
-fn count_nodes(node: &Box<Node>) -> usize {
+fn count_nodes<T: Distance>(node: &Box<Node<T>>) -> usize {
     let mut count = 1;
     for child in (*node.children).iter() {
         count += count_nodes(child);
@@ -95,31 +109,31 @@ fn count_nodes(node: &Box<Node>) -> usize {
     return count;
 }
 static EDGE_COUNTER: AtomicUsize = AtomicUsize::new(0);
-fn dfs(
-    agents: &Vec<Coord>,
-    tasks: &Vec<Task>,
+fn dfs<T: Distance + Clone + Copy>(
+    agents: &Vec<Agent<T>>,
+    tasks: &Vec<Task<T>>,
     path_checking: bool,
-) -> (f32, Vec<Edge>, Vec<Box<Node>>) {
-    let mut roots: Vec<Box<Node>> = Vec::new();
+) -> (f32, Vec<Edge<T>>, Vec<Box<Node<T>>>) {
+    let mut roots: Vec<Box<Node<T>>> = Vec::new();
     for (ti, taxi) in agents.iter().enumerate() {
         for (ji, journey) in tasks.iter().enumerate() {
-            let distance = distance(taxi, &journey.from) + journey.distance();
+            let distance = taxi.state.distance(&journey.from) + journey.from.distance(&journey.to);
             let mut new_times = vec![0f32; agents.len()];
             new_times[ti] = distance;
             let mut new_agents = agents.clone();
-            new_agents[ti] = journey.to;
+            new_agents[ti].state = journey.to;
 
-            EDGE_COUNTER.fetch_add(1,Ordering::SeqCst);
+            EDGE_COUNTER.fetch_add(1, Ordering::SeqCst);
             roots.push(Box::new(branch(
                 new_agents,
                 (0..tasks.len())
                     .filter_map(|i| if i == ji { None } else { Some(&tasks[i]) })
-                    .collect::<Vec<&Task>>(),
+                    .collect::<Vec<&Task<T>>>(),
                 Edge {
                     agent: ti,
                     task: journey.id,
                     path: if path_checking {
-                        Some((*taxi, journey.from, journey.to, distance))
+                        Some((taxi.state, journey.from, journey.to, distance))
                     } else {
                         None
                     },
@@ -133,13 +147,13 @@ fn dfs(
     let (time, path) = traverse_fastest(&roots);
     return (time, path, roots);
 
-    fn branch(
-        agents: Vec<Coord>,
-        tasks: Vec<&Task>,
-        edge: Edge,
+    fn branch<T: Distance + Clone + Copy>(
+        agents: Vec<Agent<T>>,
+        tasks: Vec<&Task<T>>,
+        edge: Edge<T>,
         times: Vec<f32>,
         path_checking: bool,
-    ) -> Node {
+    ) -> Node<T> {
         let mut path = Node {
             edge,
             children: Vec::new(),
@@ -153,23 +167,24 @@ fn dfs(
         }
         for (ti, taxi) in agents.iter().enumerate() {
             for (ji, journey) in tasks.iter().enumerate() {
-                let distance = distance(taxi, &journey.from) + distance(&journey.from, &journey.to);
+                let distance =
+                    taxi.state.distance(&journey.from) + journey.from.distance(&journey.to);
                 let mut new_times = times.clone();
                 new_times[ti] += distance;
                 let mut new_agents = agents.clone();
-                new_agents[ti] = journey.to;
+                new_agents[ti].state = journey.to;
 
-                EDGE_COUNTER.fetch_add(1,Ordering::SeqCst);
+                EDGE_COUNTER.fetch_add(1, Ordering::SeqCst);
                 let child = branch(
                     new_agents,
                     (0..tasks.len())
                         .filter_map(|i| if i == ji { None } else { Some(tasks[i]) })
-                        .collect::<Vec<&Task>>(),
+                        .collect::<Vec<&Task<T>>>(),
                     Edge {
                         agent: ti,
                         task: journey.id,
                         path: if path_checking {
-                            Some((*taxi, journey.from, journey.to, distance))
+                            Some((taxi.state, journey.from, journey.to, distance))
                         } else {
                             None
                         },
@@ -187,23 +202,23 @@ fn dfs(
         }
         return path;
     }
-    fn traverse_fastest(tree: &Vec<Box<Node>>) -> (f32, Vec<Edge>) {
+    fn traverse_fastest<T: Distance + Copy>(tree: &Vec<Box<Node<T>>>) -> (f32, Vec<Edge<T>>) {
         let min = tree
             .iter()
             .min_by(|x, y| (*x).min_path_time.partial_cmp(&(*y).min_path_time).unwrap())
             .unwrap();
         //println!("root min: {:.?}",min);
-        let mut path: Vec<Edge> = vec![min.edge];
+        let mut path: Vec<Edge<T>> = vec![min.edge];
         path.append(&mut traverse_val(&min.children, min.min_path_time));
 
         return (min.min_path_time, path);
-        fn traverse_val(tree: &Vec<Box<Node>>, val: f32) -> Vec<Edge> {
+        fn traverse_val<T: Distance + Copy>(tree: &Vec<Box<Node<T>>>, val: f32) -> Vec<Edge<T>> {
             let min = tree
                 .iter()
                 .find(|x| (*x).min_path_time == val)
                 .expect("Bad path");
             //println!("min: {:.?}",min);
-            let mut path: Vec<Edge> = vec![min.edge];
+            let mut path: Vec<Edge<T>> = vec![min.edge];
             if min.children.len() > 0 {
                 path.append(&mut traverse_val(&min.children, min.min_path_time));
             }
