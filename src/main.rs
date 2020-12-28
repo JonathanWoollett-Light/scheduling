@@ -1,10 +1,7 @@
 use num_format::{Locale, ToFormattedString};
-use rand::{
-    distributions::{Distribution, Uniform},
-    rngs::ThreadRng,
-};
-use std::usize;
+use rand::distributions::{Distribution, Uniform};
 use std::{
+    usize,
     sync::atomic::{AtomicUsize, Ordering},
     time::Instant,
 };
@@ -115,13 +112,13 @@ fn dfs<T: Distance + Clone + Copy>(
     path_checking: bool,
 ) -> (f32, Vec<Edge<T>>, Vec<Box<Node<T>>>) {
     let mut roots: Vec<Box<Node<T>>> = Vec::new();
-    for (ti, taxi) in agents.iter().enumerate() {
-        for (ji, journey) in tasks.iter().enumerate() {
-            let distance = taxi.state.distance(&journey.from) + journey.from.distance(&journey.to);
+    for (ti, agent) in agents.iter().enumerate() {
+        for (ji, task) in tasks.iter().enumerate() {
+            let distance = agent.state.distance(&task.from) + task.from.distance(&task.to);
             let mut new_times = vec![0f32; agents.len()];
             new_times[ti] = distance;
             let mut new_agents = agents.clone();
-            new_agents[ti].state = journey.to;
+            new_agents[ti].state = task.to;
 
             EDGE_COUNTER.fetch_add(1, Ordering::SeqCst);
             roots.push(Box::new(branch(
@@ -131,9 +128,9 @@ fn dfs<T: Distance + Clone + Copy>(
                     .collect::<Vec<&Task<T>>>(),
                 Edge {
                     agent: ti,
-                    task: journey.id,
+                    task: task.id,
                     path: if path_checking {
-                        Some((taxi.state, journey.from, journey.to, distance))
+                        Some((agent.state, task.from, task.to, distance))
                     } else {
                         None
                     },
@@ -165,14 +162,14 @@ fn dfs<T: Distance + Clone + Copy>(
                 .max_by(|x, y| x.partial_cmp(y).unwrap())
                 .unwrap()
         }
-        for (ti, taxi) in agents.iter().enumerate() {
-            for (ji, journey) in tasks.iter().enumerate() {
+        for (ti, agent) in agents.iter().enumerate() {
+            for (ji, task) in tasks.iter().enumerate() {
                 let distance =
-                    taxi.state.distance(&journey.from) + journey.from.distance(&journey.to);
+                    agent.state.distance(&task.from) + task.from.distance(&task.to);
                 let mut new_times = times.clone();
                 new_times[ti] += distance;
                 let mut new_agents = agents.clone();
-                new_agents[ti].state = journey.to;
+                new_agents[ti].state = task.to;
 
                 EDGE_COUNTER.fetch_add(1, Ordering::SeqCst);
                 let child = branch(
@@ -182,9 +179,9 @@ fn dfs<T: Distance + Clone + Copy>(
                         .collect::<Vec<&Task<T>>>(),
                     Edge {
                         agent: ti,
-                        task: journey.id,
+                        task: task.id,
                         path: if path_checking {
-                            Some((taxi.state, journey.from, journey.to, distance))
+                            Some((agent.state, task.from, task.to, distance))
                         } else {
                             None
                         },
