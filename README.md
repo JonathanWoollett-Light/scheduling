@@ -1,2 +1,5 @@
-# scheduling
-An attempt at a generalised scheduling algorithm. EXTREMELY WIP
+# 🚧 EXTRME WIP 🚧
+
+An attempt at a generalised scheduling algorithm.
+
+Currently implementing scheduling for a taxis system.
