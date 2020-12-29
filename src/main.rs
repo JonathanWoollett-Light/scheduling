@@ -60,8 +60,8 @@ struct Root<T: Distance> {
 // (size by size) world
 // a larger size allows more obvious choices (better restriction) and thus less edges
 const SIZE: usize = 1000;
-const NUM_OF_TASKS: u128 = 9; // n
-const NUM_OF_AGENTS: u128 = 3; // m
+const NUM_OF_TASKS: u128 = 8; // n
+const NUM_OF_AGENTS: u128 = 5; // m
 const PRINT_PATH: bool = false;
 
 fn main() {
@@ -89,7 +89,12 @@ fn main() {
 
     let now = Instant::now();
     // Some(|d|d>SIZE as f32)
-    let (path, root) = dfs(&agents, &tasks, Some(|d| d > SIZE as f32 / 1.5f32), false);
+    let (path, root) = dfs(
+        &agents,
+        &tasks,
+        Some(|d| d > 2.5f32 * SIZE as f32 / NUM_OF_AGENTS as f32),
+        false,
+    );
     println!("time:\t{}", time(now));
 
     //let nodes: usize = tree.iter().map(|t| count_nodes(t)).sum();
@@ -99,7 +104,7 @@ fn main() {
     println!("\tmax:\t{: >15}", max.to_formatted_string(&Locale::en));
     println!("\tactual:\t{: >15}", nodes.to_formatted_string(&Locale::en));
     println!("\tinline:\t{:.?}", EDGE_COUNTER);
-    println!("\t%:\t{:.3?}", 100f32 * (nodes as f32 / max as f32));
+    println!("\t%:\t{:.6?}", 100f32 * (nodes as f32 / max as f32));
 
     //println!("{:#?}", tree);
     println!("min_time: {:.2}", root.min_path_time);
