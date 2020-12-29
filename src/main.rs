@@ -1,10 +1,6 @@
 use num_format::{Locale, ToFormattedString};
 use rand::distributions::{Distribution, Uniform};
-use std::{
-    usize,
-    sync::atomic::AtomicUsize,
-    time::Instant,
-};
+use std::{sync::atomic::AtomicUsize, time::Instant, usize};
 
 trait Distance {
     fn distance(&self, other: &Self) -> f32;
@@ -50,7 +46,6 @@ struct Edge<T: Distance> {
     task: usize,
     path: Option<(T, T, T, f32)>,
 }
-
 #[derive(Debug)]
 struct Node<T: Distance> {
     edge: Edge<T>, // edge leading to this node
@@ -62,8 +57,10 @@ struct Root<T: Distance> {
     min_path_time: f32,
 }
 
-const SIZE: usize = 5; // (size by size) world
-const NUM_OF_TASKS: u128 = 7; // n
+// (size by size) world
+// a larger size allows more obvious choices (better restriction) and thus less edges
+const SIZE: usize = 1000;
+const NUM_OF_TASKS: u128 = 9; // n
 const NUM_OF_AGENTS: u128 = 3; // m
 const PRINT_PATH: bool = false;
 
@@ -92,27 +89,27 @@ fn main() {
 
     let now = Instant::now();
     // Some(|d|d>SIZE as f32)
-    let (path, root) = dfs(&agents, &tasks, Some(|d|d>SIZE as f32),false);
+    let (path, root) = dfs(&agents, &tasks, Some(|d| d > SIZE as f32 / 1.5f32), false);
     println!("time:\t{}", time(now));
 
     //let nodes: usize = tree.iter().map(|t| count_nodes(t)).sum();
     let nodes = root_count_edges(&root);
     println!("edges:");
-    let max = max_nodes(NUM_OF_AGENTS,NUM_OF_TASKS);
-    println!("\tmax:\t{: >12}",max.to_formatted_string(&Locale::en));
-    println!("\tactual:\t{: >12}",nodes.to_formatted_string(&Locale::en));
-    println!("\tinline:\t{:.?}",EDGE_COUNTER);
-    println!("\t%:\t{:.1?}",100f32 * (nodes as f32/max as f32));
+    let max = max_nodes(NUM_OF_AGENTS, NUM_OF_TASKS);
+    println!("\tmax:\t{: >15}", max.to_formatted_string(&Locale::en));
+    println!("\tactual:\t{: >15}", nodes.to_formatted_string(&Locale::en));
+    println!("\tinline:\t{:.?}", EDGE_COUNTER);
+    println!("\t%:\t{:.3?}", 100f32 * (nodes as f32 / max as f32));
 
     //println!("{:#?}", tree);
     println!("min_time: {:.2}", root.min_path_time);
-    if PRINT_PATH { println!("path: \n{:#?}", path); }
-    
-    
+    if PRINT_PATH {
+        println!("path: \n{:#?}", path);
+    }
 }
 
 // TODO There has got to be a better way to do this (I'm guessing `impl Iterator for Root` and `impl Iterator for Node`)
-fn root_count_edges<T: Distance>(root:&Root<T>) -> usize {
+fn root_count_edges<T: Distance>(root: &Root<T>) -> usize {
     let mut count = 0;
     for child in root.children.iter() {
         count += node_count_edges(child);
@@ -128,17 +125,19 @@ fn root_count_edges<T: Distance>(root:&Root<T>) -> usize {
     }
 }
 
-fn max_nodes(m:u128,n:u128) -> u128 {
-    (0u128..n).map(|i| (0..i+1).map(|j|m*(n-j)).product::<u128>()).sum::<u128>()
+fn max_nodes(m: u128, n: u128) -> u128 {
+    (0u128..n)
+        .map(|i| (0..i + 1).map(|j| m * (n - j)).product::<u128>())
+        .sum::<u128>()
 }
 
 static EDGE_COUNTER: AtomicUsize = AtomicUsize::new(0);
 fn dfs<T: Distance + Clone + Copy>(
     agents: &[Agent<T>],
     tasks: &[Task<T>],
-    restriction: Option<fn(f32)->bool>,
+    restriction: Option<fn(f32) -> bool>,
     path_checking: bool,
-) -> (Vec<Edge<T>> , Root<T>) {
+) -> (Vec<Edge<T>>, Root<T>) {
     let mut roots: Vec<Node<T>> = Vec::new();
     for (ti, agent) in agents.iter().enumerate() {
         for (ji, task) in tasks.iter().enumerate() {
@@ -151,7 +150,11 @@ fn dfs<T: Distance + Clone + Copy>(
             let mut new_agents = agents.to_vec();
             new_agents[ti].state = task.to;
 
-            if let Some(res_fn)=restriction { if res_fn(to_task_distance) { continue; }}
+            if let Some(res_fn) = restriction {
+                if res_fn(to_task_distance) {
+                    continue;
+                }
+            }
 
             EDGE_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             roots.push(branch(
@@ -176,13 +179,19 @@ fn dfs<T: Distance + Clone + Copy>(
     }
     //println!("{:#?}", roots);
     let (time, path) = traverse_fastest(&roots);
-    return (path, Root { children: roots, min_path_time: time });
+    return (
+        path,
+        Root {
+            children: roots,
+            min_path_time: time,
+        },
+    );
     // return (time, path, roots);
 
     fn branch<T: Distance + Clone + Copy>(
         agents: Vec<Agent<T>>,
         tasks: Vec<&Task<T>>,
-        restriction: Option<fn(f32)->bool>,
+        restriction: Option<fn(f32) -> bool>,
         edge: Edge<T>,
         times: Vec<f32>,
         path_checking: bool,
@@ -209,7 +218,11 @@ fn dfs<T: Distance + Clone + Copy>(
                 let mut new_agents = agents.clone();
                 new_agents[ti].state = task.to;
 
-                if let Some(res_fn)=restriction { if res_fn(to_task_distance) { continue; }}
+                if let Some(res_fn) = restriction {
+                    if res_fn(to_task_distance) {
+                        continue;
+                    }
+                }
 
                 EDGE_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                 let child = branch(
@@ -253,7 +266,7 @@ fn dfs<T: Distance + Clone + Copy>(
         fn traverse_val<T: Distance + Copy>(tree: &[Box<Node<T>>], val: f32) -> Vec<Edge<T>> {
             let min = tree
                 .iter()
-                .find(|x| (*x).min_path_time.partial_cmp(&val)==Some(std::cmp::Ordering::Equal))
+                .find(|x| (*x).min_path_time.partial_cmp(&val) == Some(std::cmp::Ordering::Equal))
                 .expect("Bad path");
             //println!("min: {:.?}",min);
             let mut path: Vec<Edge<T>> = vec![min.edge];
