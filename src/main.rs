@@ -6,7 +6,7 @@ trait Distance {
     fn distance(&self, other: &Self) -> f32;
 }
 trait Children {
-    fn children(&self) -> usize;
+    fn children(&self) -> u128;
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -56,8 +56,8 @@ struct Node<T: Distance> {
     min_path_time: f32,
 }
 impl<T: Distance> Children for Node<T> {
-    fn children(&self) -> usize {
-        1usize + self.children.iter().map(|c| c.children()).sum::<usize>()
+    fn children(&self) -> u128 {
+        1u128 + self.children.iter().map(|c| c.children()).sum::<u128>()
     }
 }
 struct Root<T: Distance> {
@@ -65,7 +65,7 @@ struct Root<T: Distance> {
     min_path_time: f32,
 }
 impl<T: Distance> Children for Root<T> {
-    fn children(&self) -> usize {
+    fn children(&self) -> u128 {
         self.children.iter().map(|c| c.children()).sum()
     }
 }
