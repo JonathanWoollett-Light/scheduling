@@ -5,6 +5,9 @@ use std::{sync::atomic::AtomicUsize, time::Instant, usize};
 trait Distance {
     fn distance(&self, other: &Self) -> f32;
 }
+trait Children {
+    fn children(&self) -> usize;
+}
 
 #[derive(Debug, Copy, Clone)]
 struct Coord {
@@ -52,9 +55,19 @@ struct Node<T: Distance> {
     children: Vec<Box<Node<T>>>,
     min_path_time: f32,
 }
+impl<T: Distance> Children for Node<T> {
+    fn children(&self) -> usize {
+        1usize + self.children.iter().map(|c| c.children()).sum::<usize>()
+    }
+}
 struct Root<T: Distance> {
     children: Vec<Node<T>>,
     min_path_time: f32,
+}
+impl<T: Distance> Children for Root<T> {
+    fn children(&self) -> usize {
+        self.children.iter().map(|c| c.children()).sum()
+    }
 }
 
 // (size by size) world
@@ -98,7 +111,7 @@ fn main() {
     println!("time:\t{}", time(now));
 
     //let nodes: usize = tree.iter().map(|t| count_nodes(t)).sum();
-    let nodes = root_count_edges(&root);
+    let nodes = root.children();
     println!("edges:");
     let max = max_nodes(NUM_OF_AGENTS, NUM_OF_TASKS);
     println!("\tmax:\t{: >15}", max.to_formatted_string(&Locale::en));
@@ -110,23 +123,6 @@ fn main() {
     println!("min_time: {:.2}", root.min_path_time);
     if PRINT_PATH {
         println!("path: \n{:#?}", path);
-    }
-}
-
-// TODO There has got to be a better way to do this (I'm guessing `impl Iterator for Root` and `impl Iterator for Node`)
-fn root_count_edges<T: Distance>(root: &Root<T>) -> usize {
-    let mut count = 0;
-    for child in root.children.iter() {
-        count += node_count_edges(child);
-    }
-    return count;
-
-    fn node_count_edges<T: Distance>(node: &Node<T>) -> usize {
-        let mut count = 1;
-        for child in node.children.iter() {
-            count += node_count_edges(child);
-        }
-        count
     }
 }
 
