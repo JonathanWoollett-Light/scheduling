@@ -1,56 +1,17 @@
-use num_format::{Locale, ToFormattedString};
-use rand::distributions::{Distribution, Uniform};
-use std::{sync::atomic::AtomicUsize, time::Instant, usize};
+use crate::core::*;
 
-trait Distance {
-    fn distance(&self, other: &Self) -> f32;
-}
-trait Children {
+pub trait Children {
     fn children(&self) -> u128;
 }
 
 #[derive(Debug, Copy, Clone)]
-struct Coord {
-    x: usize,
-    y: usize,
-}
-impl Coord {
-    fn new(
-        dist: &rand::distributions::Uniform<usize>,
-        mut rng: &mut rand::rngs::ThreadRng,
-    ) -> Self {
-        Coord {
-            x: dist.sample(&mut rng),
-            y: dist.sample(&mut rng),
-        }
-    }
-}
-impl Distance for Coord {
-    fn distance(&self, other: &Self) -> f32 {
-        (self.x as f32 - other.x as f32).abs() + (self.y as f32 - other.y as f32).abs()
-    }
-}
-
-#[derive(Debug, Copy, Clone)]
-struct Agent<T: Distance + Clone> {
-    state: T,
-}
-
-#[derive(Debug)]
-struct Task<T: Distance> {
-    id: usize,
-    from: T,
-    to: T,
-}
-
-#[derive(Debug, Copy, Clone)]
-struct Edge<T: Distance> {
+pub struct Edge<T: Distance> {
     agent: usize,
     task: usize,
     path: Option<(T, T, T, f32)>,
 }
 #[derive(Debug)]
-struct Node<T: Distance> {
+pub struct Node<T: Distance> {
     edge: Edge<T>, // edge leading to this node
     children: Vec<Box<Node<T>>>,
     min_path_time: f32,
@@ -60,9 +21,9 @@ impl<T: Distance> Children for Node<T> {
         1u128 + self.children.iter().map(|c| c.children()).sum::<u128>()
     }
 }
-struct Root<T: Distance> {
+pub struct Root<T: Distance> {
     children: Vec<Node<T>>,
-    min_path_time: f32,
+    pub min_path_time: f32,
 }
 impl<T: Distance> Children for Root<T> {
     fn children(&self) -> u128 {
@@ -70,70 +31,7 @@ impl<T: Distance> Children for Root<T> {
     }
 }
 
-// (size by size) world
-// a larger size allows more obvious choices (better restriction) and thus less edges
-const SIZE: usize = 1000;
-const NUM_OF_TASKS: u128 = 8; // n
-const NUM_OF_AGENTS: u128 = 5; // m
-const PRINT_PATH: bool = false;
-
-fn main() {
-    println!("Hello, world!");
-
-    //return;
-    let mut rng = rand::thread_rng();
-    let dist = Uniform::from(0..SIZE);
-
-    let agents: Vec<Agent<Coord>> = (0..NUM_OF_AGENTS)
-        .map(|_| Agent {
-            state: Coord::new(&dist, &mut rng),
-        })
-        .collect();
-    //println!("agents: {:?}", agents);
-
-    let tasks: Vec<Task<Coord>> = (0..NUM_OF_TASKS)
-        .map(|i| Task {
-            id: i as usize,
-            from: Coord::new(&dist, &mut rng),
-            to: Coord::new(&dist, &mut rng),
-        })
-        .collect();
-    //println!("tasks: {:?}", tasks);
-
-    let now = Instant::now();
-    // Some(|d|d>SIZE as f32)
-    let (path, root) = dfs(
-        &agents,
-        &tasks,
-        Some(|d| d > 2.5f32 * SIZE as f32 / NUM_OF_AGENTS as f32),
-        false,
-    );
-    println!("time:\t{}", time(now));
-
-    //let nodes: usize = tree.iter().map(|t| count_nodes(t)).sum();
-    let nodes = root.children();
-    println!("edges:");
-    let max = max_nodes(NUM_OF_AGENTS, NUM_OF_TASKS);
-    println!("\tmax:\t{: >15}", max.to_formatted_string(&Locale::en));
-    println!("\tactual:\t{: >15}", nodes.to_formatted_string(&Locale::en));
-    println!("\tinline:\t{:.?}", EDGE_COUNTER);
-    println!("\t%:\t{:.6?}", 100f32 * (nodes as f32 / max as f32));
-
-    //println!("{:#?}", tree);
-    println!("min_time: {:.2}", root.min_path_time);
-    if PRINT_PATH {
-        println!("path: \n{:#?}", path);
-    }
-}
-
-fn max_nodes(m: u128, n: u128) -> u128 {
-    (0u128..n)
-        .map(|i| (0..i + 1).map(|j| m * (n - j)).product::<u128>())
-        .sum::<u128>()
-}
-
-static EDGE_COUNTER: AtomicUsize = AtomicUsize::new(0);
-fn dfs<T: Distance + Clone + Copy>(
+pub fn search<T: Distance + Clone + Copy>(
     agents: &[Agent<T>],
     tasks: &[Task<T>],
     restriction: Option<fn(f32) -> bool>,
@@ -157,7 +55,6 @@ fn dfs<T: Distance + Clone + Copy>(
                 }
             }
 
-            EDGE_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             roots.push(branch(
                 new_agents,
                 (0..tasks.len())
@@ -225,7 +122,6 @@ fn dfs<T: Distance + Clone + Copy>(
                     }
                 }
 
-                EDGE_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                 let child = branch(
                     new_agents,
                     (0..tasks.len())
@@ -279,10 +175,8 @@ fn dfs<T: Distance + Clone + Copy>(
     }
 }
 
-fn time(instant: Instant) -> String {
-    let mut millis = instant.elapsed().as_millis();
-    let seconds = (millis as f32 / 1000f32).floor();
-    millis %= 1000;
-    let time = format!("{:#02}:{:#03}", seconds, millis);
-    time
+pub fn max_nodes(m: u128, n: u128) -> u128 {
+    (0u128..n)
+        .map(|i| (0..i + 1).map(|j| m * (n - j)).product::<u128>())
+        .sum::<u128>()
 }
