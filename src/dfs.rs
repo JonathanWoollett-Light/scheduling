@@ -31,23 +31,23 @@ impl<T: Distance> Children for Root<T> {
     }
 }
 
-pub fn search<T: Distance + Clone + Copy>(
+pub fn schedule<T: Distance + Clone + Copy>(
     agents: &[Agent<T>],
-    tasks: &[Task<T>],
+    tasks: Vec<(usize, Task<T>)>,
     restriction: Option<fn(f32) -> bool>,
     path_checking: bool,
 ) -> (Vec<Edge<T>>, Root<T>) {
     let mut roots: Vec<Node<T>> = Vec::new();
-    for (ti, agent) in agents.iter().enumerate() {
-        for (ji, task) in tasks.iter().enumerate() {
+    for (ai, agent) in agents.iter().enumerate() {
+        for (ti, task) in tasks.iter() {
             let to_task_distance = agent.state.distance(&task.from);
             let task_distance = task.from.distance(&task.to);
             let distance = to_task_distance + task_distance;
 
             let mut new_times = vec![0f32; agents.len()];
-            new_times[ti] = distance;
+            new_times[ai] = distance;
             let mut new_agents = agents.to_vec();
-            new_agents[ti].state = task.to;
+            new_agents[ai].state = task.to;
 
             if let Some(res_fn) = restriction {
                 if res_fn(to_task_distance) {
@@ -57,13 +57,14 @@ pub fn search<T: Distance + Clone + Copy>(
 
             roots.push(branch(
                 new_agents,
-                (0..tasks.len())
-                    .filter_map(|i| if i == ji { None } else { Some(&tasks[i]) })
-                    .collect::<Vec<&Task<T>>>(),
+                tasks
+                    .iter()
+                    .filter(|(ti2, _)| ti2 != ti)
+                    .collect::<Vec<&(usize, Task<T>)>>(),
                 restriction,
                 Edge {
-                    agent: ti,
-                    task: task.id,
+                    agent: ai,
+                    task: *ti,
                     path: if path_checking {
                         Some((agent.state, task.from, task.to, distance))
                     } else {
@@ -88,7 +89,7 @@ pub fn search<T: Distance + Clone + Copy>(
 
     fn branch<T: Distance + Clone + Copy>(
         agents: Vec<Agent<T>>,
-        tasks: Vec<&Task<T>>,
+        tasks: Vec<&(usize, Task<T>)>,
         restriction: Option<fn(f32) -> bool>,
         edge: Edge<T>,
         times: Vec<f32>,
@@ -105,16 +106,16 @@ pub fn search<T: Distance + Clone + Copy>(
                 .max_by(|x, y| x.partial_cmp(y).unwrap())
                 .unwrap()
         }
-        for (ti, agent) in agents.iter().enumerate() {
-            for (ji, task) in tasks.iter().enumerate() {
+        for (ai, agent) in agents.iter().enumerate() {
+            for (ti, task) in tasks.iter() {
                 let to_task_distance = agent.state.distance(&task.from);
                 let task_distance = task.from.distance(&task.to);
                 let distance = to_task_distance + task_distance;
 
-                let mut new_times = times.clone();
-                new_times[ti] += distance;
-                let mut new_agents = agents.clone();
-                new_agents[ti].state = task.to;
+                let mut new_times = vec![0f32; agents.len()];
+                new_times[ai] = distance;
+                let mut new_agents = agents.to_vec();
+                new_agents[ai].state = task.to;
 
                 if let Some(res_fn) = restriction {
                     if res_fn(to_task_distance) {
@@ -124,13 +125,14 @@ pub fn search<T: Distance + Clone + Copy>(
 
                 let child = branch(
                     new_agents,
-                    (0..tasks.len())
-                        .filter_map(|i| if i == ji { None } else { Some(tasks[i]) })
-                        .collect::<Vec<&Task<T>>>(),
+                    tasks
+                        .iter()
+                        .filter_map(|t| if t.0 != *ti { Some(*t) } else { None })
+                        .collect::<Vec<&(usize, Task<T>)>>(),
                     restriction,
                     Edge {
-                        agent: ti,
-                        task: task.id,
+                        agent: ai,
+                        task: *ti,
                         path: if path_checking {
                             Some((agent.state, task.from, task.to, distance))
                         } else {
@@ -175,7 +177,7 @@ pub fn search<T: Distance + Clone + Copy>(
     }
 }
 
-pub fn max_nodes(m: u128, n: u128) -> u128 {
+pub fn max(m: u128, n: u128) -> u128 {
     (0u128..n)
         .map(|i| (0..i + 1).map(|j| m * (n - j)).product::<u128>())
         .sum::<u128>()

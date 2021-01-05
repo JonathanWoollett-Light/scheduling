@@ -9,7 +9,6 @@ pub struct Agent<T: Distance + Clone> {
 
 #[derive(Debug)]
 pub struct Task<T: Distance> {
-    pub id: usize,
     pub from: T,
     pub to: T,
 }

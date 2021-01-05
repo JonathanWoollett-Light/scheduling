@@ -48,8 +48,7 @@ pub fn gen(
     //println!("agents: {:?}", agents);
 
     let tasks: Vec<Task<Coord>> = (0..num_of_tasks)
-        .map(|i| Task {
-            id: i as usize,
+        .map(|_| Task {
             from: Coord::new(&dist, &mut rng),
             to: Coord::new(&dist, &mut rng),
         })
